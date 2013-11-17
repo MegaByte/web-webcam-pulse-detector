@@ -2,6 +2,7 @@ from lib.device import Stream
 from lib.processors import findFaceGetPulse
 from lib.interface import plotXY, imshow, waitKey,destroyWindow, moveWindow, resize
 import numpy as np
+import sys
 
 
 class getPulseApp(object):
@@ -130,8 +131,9 @@ class getPulseApp(object):
 
 if __name__ == "__main__":
     # example (replace these values)
-    url = "~/workspace/"
-    App = getPulseApp(dir)
+    if len(sys.argv) < 2:
+        raise Exception("Specify a directory for the webcam stream")
+    App = getPulseApp(sys.argv[1])
     while True:
         App.main_loop()
 

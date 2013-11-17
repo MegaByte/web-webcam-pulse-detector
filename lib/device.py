@@ -2,7 +2,6 @@ import cv2, time
 import urllib2, base64
 import numpy as np
 import glob
-import Image
 
 class ipCamera(object):
 
@@ -42,6 +41,8 @@ class Stream(object):
         self.photos = glob.glob(dir)
 
     def get_frame(self):
-        next_photo = self.photo[self.current_photo_index]
+        if self.current_photo_index >= len(self.photos):
+            return None
+        next_photo = self.photos[self.current_photo_index]
         self.current_photo_index += 1
-        return Image.open(next_photo)
+        return cv2.imread(next_photo, 1)
