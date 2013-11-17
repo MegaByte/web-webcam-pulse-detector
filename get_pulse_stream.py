@@ -99,12 +99,17 @@ class getPulseApp(object):
             if chr(pressed) == key:
                 self.key_controls[key]()
 
+    def print_data(self):
+        print "BPM: {0}".format(self.processor.fft.samples)
+
     def main_loop(self):
         """
         Single iteration of the application's main loop.
         """
         # Get current image frame from the camera
         frame = self.stream.get_frame()
+        if frame is None:
+            return False
         self.h,self.w,_c = frame.shape
 
         #display unaltered frame
@@ -119,22 +124,22 @@ class getPulseApp(object):
 
         #show the processed/annotated output frame
 
-        output_frame = resize(output_frame, (640,480))
-        imshow("Processed",output_frame)
+        # output_frame = resize(output_frame, (640,480))
+        # imshow("Processed",output_frame)
 
         #create and/or update the raw data display if needed
-        if self.bpm_plot:
-            self.make_bpm_plot()
+        # if self.bpm_plot:
+        #     self.make_bpm_plot()
 
-        #handle any key presses
-        self.key_handler()
+        return True
 
 if __name__ == "__main__":
     # example (replace these values)
     if len(sys.argv) < 2:
         raise Exception("Specify a directory for the webcam stream")
     App = getPulseApp(sys.argv[1])
-    while True:
-        App.main_loop()
-
+    next_frame = App.main_loop()
+    while next_frame:
+        next_frame = App.main_loop()
+    App.print_data()
 
