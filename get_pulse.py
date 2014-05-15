@@ -3,6 +3,7 @@ from lib.processors import findFaceGetPulse
 from lib.interface import plotXY, imshow, waitKey,destroyWindow, moveWindow
 import numpy as np      
 import datetime
+import argparse
 
 class getPulseApp(object):
     """
@@ -40,6 +41,8 @@ class getPulseApp(object):
         self.key_controls = {"s" : self.toggle_search,
                              "d" : self.toggle_display_plot,
                              "f" : self.write_csv}
+
+	self.last_time = datetime.datetime.now()
         
     def write_csv(self):
         """
@@ -116,11 +119,15 @@ class getPulseApp(object):
             if chr(self.pressed) == key:
                 self.key_controls[key]()
 
-    def main_loop(self):
+    def main_loop(self, skip):
         """
         Single iteration of the application's main loop.
         """
         # Get current image frame from the camera
+	if datetime.datetime.now() - self.last_time < datetime.timedelta(microseconds = skip):
+            return
+        print self.last_time
+	self.last_time = datetime.datetime.now()
         frame = self.camera.get_frame()
         self.h,self.w,_c = frame.shape
         
@@ -146,6 +153,12 @@ class getPulseApp(object):
         self.key_handler()
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--rate", help="Frames per second", type=float)
+    args = parser.parse_args()
+    skip = 1000000 / 100
+    if args.rate:
+        skip = 1000000 / args.rate
     App = getPulseApp()
     while True:
-        App.main_loop()
+        App.main_loop(skip)
