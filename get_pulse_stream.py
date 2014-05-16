@@ -149,6 +149,7 @@ class getPulseApp(object):
 class MyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+
         self.send_response(200)
         if self.path == '/crossdomain.xml':
             self.send_header('Content-type', 'text/xml')
@@ -157,34 +158,40 @@ class MyHandler(BaseHTTPRequestHandler):
         else:
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            while App.main_loop():
-                url = "http://localhost:3000/train/pulse_data"
-                values = dict(bpm=App.bpm, captured_at=App.processor.time_in, workout_slot_id=App.workout_slot_id)
-                data = urllib.urlencode(values)
-                req = urllib2.Request(url, data)
-                rsp = urllib2.urlopen(req)
-                content = rsp.read()
-                time.sleep(0.01)
             if self.path == '/':
                 self.wfile.write(str(App.bpm))
-
-            else:
+            elif self.is_workout_slot_request():
+                dir = "/tmp/" + self.path[1:] + "/*.jpg" # TODO: glob jpg, png, gif
+                App = getPulseApp(dir)
+                while App.main_loop():
+                    url    = "http://localhost:3000/train/pulse_data"
+                    values = dict(bpm=App.bpm, captured_at=App.processor.time_in, workout_slot_id=App.workout_slot_id)
+                    data   = urllib.urlencode(values)
+                    req    = urllib2.Request(url, data)
+                    rsp    = urllib2.urlopen(req)
+                    content = rsp.read()
+                    time.sleep(0.01)
                 self.wfile.write(self.path[1:] + "({bpm: " + str(App.bpm) + "})")
+            else:
+              self.wfile.write(self.path[1:] + "(You need to request a workout slot)")
         return
+
     def do_POST(self):
         self.send_response(200)
         # dump image into processing directory?
         return
 
+    def is_workout_slot_request(self):
+        pattern = "\/(\d+)\/?"
+        matcher = re.compile(pattern)
+        return matcher.search(self.path) <> None
+
 if __name__ == "__main__":
     # example (replace these values)
-    if len(sys.argv) < 2:
-        raise Exception("Specify a directory for the webcam stream")
-    App = getPulseApp(sys.argv[1])
-
+    # if len(sys.argv) < 2:
+    #     raise Exception("Specify a directory for the webcam stream")
     try:
         server = HTTPServer(('', 3001), MyHandler)
         server.serve_forever()
     except KeyboardInterrupt:
-        App.print_data()
         server.socket.close()
