@@ -110,7 +110,7 @@ class getPulseApp(object):
                 self.key_controls[key]()
 
     def print_data(self):
-        print "BPM: {0}".format(self.processor.fft.samples)
+        return "{0}".format(self.processor.fft.samples)
 
     def main_loop(self):
         """
@@ -149,49 +149,74 @@ class getPulseApp(object):
 class MyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+        self.process_and_return()
 
+    def do_POST(self):
+        path = self.path.split('/')
+        ctype, pdict = cgi.parse_header(self.headers.getheader('content-type'))
+        if ctype == 'multipart/form-data':
+            postvars = cgi.parse_multipart(self.rfile, pdict)
+        elif ctype == 'application/x-www-form-urlencoded':
+            length = int(self.headers.getheader('content-length'))
+            postvars = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
+        else:
+            postvars = {}
+        self.process_and_return()
+        # dump image into processing directory?
+
+    def process_and_return(self):
         self.send_response(200)
         if self.path == '/crossdomain.xml':
             self.send_header('Content-type', 'text/xml')
             self.end_headers()
             self.wfile.write('<cross-domain-policy><site-control permitted-cross-domain-policies="master-only"/><allow-access-from domain="*"/><allow-http-request-headers-from domain="*" headers="*"/></cross-domain-policy>')
+        elif self.path == '/favicon.ico':
+            return
         else:
-            self.send_header('Content-type', 'text/html')
+            self.send_header('Content-type', 'text/plain')
             self.end_headers()
-            if self.path == '/':
-                self.wfile.write(str(App.bpm))
-            elif self.is_workout_slot_request():
-                dir = "/tmp/" + self.path[1:] + "/*.png" # TODO: glob jpg, png, gif
-                App = getPulseApp(dir)
-                while App.main_loop():
-                    url    = "http://localhost:3000/train/pulse_data"
-                    values = dict(bpm=App.bpm, captured_at=App.processor.time_in, workout_slot_id=App.workout_slot_id)
-                    data   = urllib.urlencode(values)
-                    req    = urllib2.Request(url, data)
-                    rsp    = urllib2.urlopen(req)
-                    content = rsp.read()
-                    time.sleep(0.01)
-                self.wfile.write(self.path[1:] + "({bpm: " + str(App.bpm) + "})")
+            path = self.path.split('/')
+            workout = path[1]
+            if workout == '':
+                if len(sys.argv) <= 2:
+                    self.wfile.write("No workout specified!")
+                    return
+                else:
+                    workout = sys.argv[2]
+            if not unicode(workout).isnumeric():
+                self.wfile.write("Invalid workout specified!")
+                return
+            if not workout in App:
+                suffix = "/*.png"
+                App[workout] = getPulseApp(basedir + workout + suffix)
+            while App[workout].main_loop():
+                url = "http://localhost:3000/train/pulse_data"
+                values = dict(bpm=App[workout].bpm, captured_at=App[workout].processor.time_in, workout_slot_id=App[workout].workout_slot_id)
+                data = urllib.urlencode(values)
+                req = urllib2.Request(url, data)
+                rsp = urllib2.urlopen(req)
+                content = rsp.read()
+                time.sleep(0.01)
+
+            if len(path) > 2:
+                if path[2] == 'history':
+                    self.wfile.write(App[workout].print_data())
+                else:
+                    # JSON-P callback
+                    self.wfile.write(path[2] + "({bpm: " + str(App[workout].bpm) + "})")
             else:
-              self.wfile.write(self.path[1:] + "(You need to request a workout slot)")
-        return
-
-    def do_POST(self):
-        self.send_response(200)
-        # dump image into processing directory?
-        return
-
-    def is_workout_slot_request(self):
-        pattern = "\/(\d+)\/?"
-        matcher = re.compile(pattern)
-        return matcher.search(self.path) <> None
+                self.wfile.write(str(App[workout].bpm))
 
 if __name__ == "__main__":
-    # example (replace these values)
-    # if len(sys.argv) < 2:
-    #     raise Exception("Specify a directory for the webcam stream")
+    App = {}
+    basedir = '/tmp/'
+    if len(sys.argv) > 1:
+        basedir = sys.argv[1]
+
     try:
         server = HTTPServer(('', 3001), MyHandler)
         server.serve_forever()
     except KeyboardInterrupt:
+        if len(sys.argv) > 2 and sys.argv[2] in App:
+            print App[sys.argv[2]].print_data()
         server.socket.close()
