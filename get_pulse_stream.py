@@ -109,7 +109,7 @@ class getPulseApp(object):
         # Get current image frame from the camera
         (frame, frame_time) = self.stream.get_frame()
         if frame is None:
-            return False
+            return True
         self.h,self.w,_c = frame.shape
 
         #display unaltered frame
@@ -131,6 +131,7 @@ class getPulseApp(object):
         #create and/or update the raw data display if needed
         # if self.bpm_plot:
         #     self.make_bpm_plot()
+        print self.processor.time_in + '\t' + self.processor.fft.samples[-1]
 
         return True
 
