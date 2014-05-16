@@ -3,6 +3,7 @@ import urllib2, base64
 import numpy as np
 import glob
 import time
+import re
 
 class ipCamera(object):
 
@@ -47,5 +48,5 @@ class Stream(object):
             return None
         next_photo = self.photos[self.current_photo_index]
         self.current_photo_index += 1
-        frame_info = next_photo.split('.')
-        return (cv2.imread(next_photo, 1), frame_info[0] + '.' + frame_info[1])
+        frame_time = re.findall('\d+\.\d+')
+        return (cv2.imread(next_photo, 1), float(frame_time[0]))
