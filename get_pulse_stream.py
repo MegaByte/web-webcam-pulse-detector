@@ -1,9 +1,12 @@
-from lib.device import Stream
+from lib.device import Stream, Camera
 from lib.processors import findFaceGetPulse
 from lib.interface import plotXY, imshow, waitKey,destroyWindow, moveWindow, resize
 import numpy as np
 import sys, time, urllib, urllib2, re
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import datetime
+import argparse
+import thread
 
 class getPulseApp(object):
     """
@@ -17,8 +20,15 @@ class getPulseApp(object):
         #Imaging device - must be a connected stream (not an ip camera or mjpeg
         #stream)
 
-        self.stream = Stream(dir)
-        self.workout_slot_id = self.get_slot_id(dir)
+        if dir:
+            self.camera = None
+            self.stream = Stream(dir)
+            self.workout_slot_id = self.get_slot_id(dir)
+        else:
+            self.camera = Camera(camera=0) #first camera by default
+            self.stream = None
+            self.pressed = 0
+
         self.w,self.h = 0,0
 
         #Containerized analysis of recieved image frames (an openMDAO assembly)
@@ -41,8 +51,23 @@ class getPulseApp(object):
         #Maps keystrokes to specified methods
         #(A GUI window must have focus for these to work)
         self.key_controls = {"s" : self.toggle_search,
-                        "d" : self.toggle_display_plot}
+                             "d" : self.toggle_display_plot,
+                             "f" : self.write_csv}
+
         self.bpm = 0
+
+        self.last_time = datetime.datetime.now()
+
+    def write_csv(self):
+        """
+        Writes current data to a csv file
+        """
+        bpm = " " + str(int(self.processor.measure_heart.bpm))
+        fn = str(datetime.datetime.now()).split(".")[0] + bpm + " BPM.csv"
+
+        data = np.array([self.processor.fft.times,
+                         self.processor.fft.samples]).T
+        np.savetxt(fn, data, delimiter=',')
 
     def get_slot_id(self, dir):
       pattern = "(\d+)"
@@ -112,12 +137,18 @@ class getPulseApp(object):
     def print_data(self):
         return "{0}".format(self.processor.fft.samples)
 
-    def main_loop(self):
+    def main_loop(self, skip):
         """
         Single iteration of the application's main loop.
         """
-        # Get current image frame from the camera
-        (frame, frame_time) = self.stream.get_frame()
+        if self.camera:
+            if datetime.datetime.now() - self.last_time < datetime.timedelta(microseconds = skip):
+                return
+            self.last_time = datetime.datetime.now()
+            (frame, frame_time) = self.camera.get_frame()
+        else:
+            # Get current image frame from the camera
+            (frame, frame_time) = self.stream.get_frame()
         if frame is None:
             return False
         self.h,self.w,_c = frame.shape
@@ -178,25 +209,28 @@ class MyHandler(BaseHTTPRequestHandler):
             path = self.path.split('/')
             workout = path[1]
             if workout == '':
-                if len(sys.argv) <= 2:
+                if not args.path and not args.local:
                     self.wfile.write("No workout specified!")
                     return
+                elif args.local:
+                    workout = '0'
                 else:
-                    workout = sys.argv[2]
+                    workout = args.path
             if not unicode(workout).isnumeric():
                 self.wfile.write("Invalid workout specified!")
                 return
-            if not workout in App:
-                suffix = "/*.png"
-                App[workout] = getPulseApp(basedir + workout + suffix)
-            while App[workout].main_loop():
-                url = "http://localhost:3000/train/pulse_data"
-                values = dict(bpm=App[workout].bpm, captured_at=App[workout].processor.time_in, workout_slot_id=App[workout].workout_slot_id)
-                data = urllib.urlencode(values)
-                req = urllib2.Request(url, data)
-                rsp = urllib2.urlopen(req)
-                content = rsp.read()
-                time.sleep(0.01)
+            if float(workout) > 0:
+                if not workout in App:
+                    suffix = "/*.png"
+                    App[workout] = getPulseApp(basedir + workout + suffix)
+                    while App[workout].main_loop(0):
+                        url = "http://localhost:3000/train/pulse_data"
+                        values = dict(bpm=App[workout].bpm, captured_at=App[workout].processor.time_in, workout_slot_id=App[workout].workout_slot_id)
+                        data = urllib.urlencode(values)
+                        req = urllib2.Request(url, data)
+                        rsp = urllib2.urlopen(req)
+                        content = rsp.read()
+                    time.sleep(0.01)
 
             if len(path) > 2:
                 if path[2] == 'history':
@@ -207,16 +241,33 @@ class MyHandler(BaseHTTPRequestHandler):
             else:
                 self.wfile.write(str(App[workout].bpm))
 
+def run_main_loop():
+    while True:
+        App['0'].main_loop(skip)
+        time.sleep(0.001)
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--rate", help="Frames per second", type=float)
+    parser.add_argument("-l", "--local", help="Process local camera", nargs="*")
+    parser.add_argument("-b", "--base", help="Base directory")
+    parser.add_argument("-p", "--path", help="Process local path")
+    args = parser.parse_args()
+    skip = 1000000 / 100
+    if args.rate:
+        skip = 1000000 / args.rate
+
     App = {}
     basedir = '/tmp/'
-    if len(sys.argv) > 1:
-        basedir = sys.argv[1]
-
+    if args.base:
+        basedir = args.base
+    if args.local:
+        App['0'] = getPulseApp(None)
+        thread.start_new_thread(run_main_loop, ())
     try:
         server = HTTPServer(('', 3001), MyHandler)
         server.serve_forever()
     except KeyboardInterrupt:
-        if len(sys.argv) > 2 and sys.argv[2] in App:
-            print App[sys.argv[2]].print_data()
+        if args.path and args.path in App:
+            print App[args.path].print_data()
         server.socket.close()
