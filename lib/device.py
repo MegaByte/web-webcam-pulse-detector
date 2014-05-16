@@ -40,13 +40,13 @@ class Camera(object):
 class Stream(object):
 
     def __init__(self, dir = None):
-        self.current_photo_index = 0
-        self.photos = glob.glob(dir)
+        self.last_time = 0
 
     def get_frame(self):
-        if self.current_photo_index >= len(self.photos):
-            return (None, None)
-        next_photo = self.photos[self.current_photo_index]
-        self.current_photo_index += 1
-        frame_time = re.findall('\d+\.\d+', )
-        return (cv2.imread(next_photo, 1), float(frame_time[0]))
+        photos = sorted(glob.glob(dir))
+        for photo in photos:
+            frame_time = re.findall('\d+\.\d+', photo)
+            if len(frame_time) > 0 and frame_time[0] > self.last_time:
+                self.last_time = frame_time[0]
+                return (cv2.imread(next_photo, 1), float(frame_time[0]))
+        return (None, None)
