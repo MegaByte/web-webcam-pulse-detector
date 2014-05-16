@@ -131,7 +131,7 @@ class getPulseApp(object):
         #create and/or update the raw data display if needed
         # if self.bpm_plot:
         #     self.make_bpm_plot()
-        print self.processor.time_in + '\t' + self.processor.fft.samples[-1]
+        print str(self.processor.time_in) + '\t' + str(self.processor.fft.samples[-1])
 
         return True
 
