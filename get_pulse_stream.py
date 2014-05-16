@@ -223,21 +223,21 @@ class MyHandler(BaseHTTPRequestHandler):
                 if not workout in App:
                     suffix = "/*.png"
                     App[workout] = getPulseApp(basedir + workout + suffix)
-                    while App[workout].main_loop(0):
-                        url = "http://localhost:3000/train/pulse_data"
-                        values = dict(bpm=App[workout].bpm, captured_at=App[workout].processor.time_in, workout_slot_id=App[workout].workout_slot_id)
-                        data = urllib.urlencode(values)
-                        req = urllib2.Request(url, data)
-                        rsp = urllib2.urlopen(req)
-                        content = rsp.read()
-                    time.sleep(0.01)
+                thread.start_new_thread(run_main_loop_non_local, (workout,))
 
             if len(path) > 2:
                 if path[2] == 'history':
                     self.wfile.write(App[workout].print_data())
                 else:
                     # JSON-P callback
-                    self.wfile.write(path[2] + "({bpm: " + str(App[workout].bpm) + "})")
+                    pattern = "callback=([^&]+)"
+                    matcher = re.compile(pattern, re.IGNORECASE)
+                    match   = matcher.search(self.path)
+                    callback_method = 'callback'
+                    if match <> None:
+                      callback_method = match.group(1)
+
+                    self.wfile.write(callback_method + "({bpm: " + str(App[workout].bpm) + "})")
             else:
                 self.wfile.write(str(App[workout].bpm))
 
@@ -245,6 +245,15 @@ def run_main_loop():
     while True:
         App['0'].main_loop(skip)
         time.sleep(0.001)
+
+def run_main_loop_non_local(workout):
+    while App[workout].main_loop(0):
+        url = "http://localhost:3000/train/pulse_data"
+        values = dict(bpm=App[workout].bpm, captured_at=App[workout].processor.time_in, workout_slot_id=App[workout].workout_slot_id)
+        data = urllib.urlencode(values)
+        req = urllib2.Request(url, data)
+        rsp = urllib2.urlopen(req)
+        content = rsp.read()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
