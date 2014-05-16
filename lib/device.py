@@ -45,6 +45,7 @@ class Stream(object):
 
     def get_frame(self):
         photos = sorted(glob.glob(self.dir))
+        print "Found " + str(len(photos)) + " photos for " + self.dir
         for photo in photos:
             frame_time = re.findall('\d+\.\d+', photo)
             if len(frame_time) > 0 and frame_time[0] > self.last_time:

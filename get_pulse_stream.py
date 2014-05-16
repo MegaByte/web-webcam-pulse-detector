@@ -2,9 +2,8 @@ from lib.device import Stream
 from lib.processors import findFaceGetPulse
 from lib.interface import plotXY, imshow, waitKey,destroyWindow, moveWindow, resize
 import numpy as np
-import sys
-import time
-
+import sys, time, urllib, urllib2, re
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 class getPulseApp(object):
     """
@@ -19,6 +18,7 @@ class getPulseApp(object):
         #stream)
 
         self.stream = Stream(dir)
+        self.workout_slot_id = self.get_slot_id(dir)
         self.w,self.h = 0,0
 
         #Containerized analysis of recieved image frames (an openMDAO assembly)
@@ -42,7 +42,16 @@ class getPulseApp(object):
         #(A GUI window must have focus for these to work)
         self.key_controls = {"s" : self.toggle_search,
                         "d" : self.toggle_display_plot}
+        self.bpm = 0
 
+    def get_slot_id(self, dir):
+      pattern = "(\d+)"
+      matcher = re.compile(pattern)
+      match   = matcher.search(dir)
+
+      if match <> None:
+        return match.group()
+      return 1
 
     def toggle_search(self):
         """
@@ -110,7 +119,7 @@ class getPulseApp(object):
         # Get current image frame from the camera
         (frame, frame_time) = self.stream.get_frame()
         if frame is None:
-            return True
+            return False
         self.h,self.w,_c = frame.shape
 
         #display unaltered frame
@@ -132,17 +141,50 @@ class getPulseApp(object):
         #create and/or update the raw data display if needed
         # if self.bpm_plot:
         #     self.make_bpm_plot()
-        print str(self.processor.time_in) + '\t' + str(self.processor.fft.samples[-1])
+        self.bpm = self.processor.fft.samples[-1]
+        print str(self.processor.time_in) + '\t' + str(self.bpm)
 
         return True
+
+class MyHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        if self.path == '/crossdomain.xml':
+            self.send_header('Content-type', 'text/xml')
+            self.end_headers()
+            self.wfile.write('<cross-domain-policy><site-control permitted-cross-domain-policies="master-only"/><allow-access-from domain="*"/><allow-http-request-headers-from domain="*" headers="*"/></cross-domain-policy>')
+        else:
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            while App.main_loop():
+                url = "http://localhost:3000/train/pulse_data"
+                values = dict(bpm=App.bpm, captured_at=App.processor.time_in, workout_slot_id=App.workout_slot_id)
+                data = urllib.urlencode(values)
+                req = urllib2.Request(url, data)
+                rsp = urllib2.urlopen(req)
+                content = rsp.read()
+                time.sleep(0.01)
+            if self.path == '/':
+                self.wfile.write(str(App.bpm))
+
+            else:
+                self.wfile.write(self.path[1:] + "({bpm: " + str(App.bpm) + "})")
+        return
+    def do_POST(self):
+        self.send_response(200)
+        # dump image into processing directory?
+        return
 
 if __name__ == "__main__":
     # example (replace these values)
     if len(sys.argv) < 2:
         raise Exception("Specify a directory for the webcam stream")
     App = getPulseApp(sys.argv[1])
-    next_frame = App.main_loop()
-    while next_frame:
-        next_frame = App.main_loop()
-        time.sleep(0.05)
-    App.print_data()
+
+    try:
+        server = HTTPServer(('', 3001), MyHandler)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        App.print_data()
+        server.socket.close()
