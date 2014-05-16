@@ -161,7 +161,7 @@ class MyHandler(BaseHTTPRequestHandler):
             if self.path == '/':
                 self.wfile.write(str(App.bpm))
             elif self.is_workout_slot_request():
-                dir = "/tmp/" + self.path[1:] + "/*.jpg" # TODO: glob jpg, png, gif
+                dir = "/tmp/" + self.path[1:] + "/*.png" # TODO: glob jpg, png, gif
                 App = getPulseApp(dir)
                 while App.main_loop():
                     url    = "http://localhost:3000/train/pulse_data"
