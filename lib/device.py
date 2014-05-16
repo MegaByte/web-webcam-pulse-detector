@@ -48,4 +48,4 @@ class Stream(object):
         next_photo = self.photos[self.current_photo_index]
         self.current_photo_index += 1
         frame_info = next_photo.split('.')
-        return (cv2.imread(next_photo, 1), frame_info[0])
+        return (cv2.imread(next_photo, 1), frame_info[0] + '.' + frame_info[1])
