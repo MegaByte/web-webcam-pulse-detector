@@ -45,8 +45,8 @@ class Stream(object):
 
     def get_frame(self):
         if self.current_photo_index >= len(self.photos):
-            return None
+            return (None, None)
         next_photo = self.photos[self.current_photo_index]
         self.current_photo_index += 1
-        frame_time = re.findall('\d+\.\d+')
+        frame_time = re.findall('\d+\.\d+', )
         return (cv2.imread(next_photo, 1), float(frame_time[0]))
