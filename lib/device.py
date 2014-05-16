@@ -49,5 +49,5 @@ class Stream(object):
             frame_time = re.findall('\d+\.\d+', photo)
             if len(frame_time) > 0 and frame_time[0] > self.last_time:
                 self.last_time = frame_time[0]
-                return (cv2.imread(next_photo, 1), float(frame_time[0]))
+                return (cv2.imread(photo, 1), float(frame_time[0]))
         return (None, None)

@@ -3,6 +3,7 @@ from lib.processors import findFaceGetPulse
 from lib.interface import plotXY, imshow, waitKey,destroyWindow, moveWindow, resize
 import numpy as np
 import sys
+import time
 
 
 class getPulseApp(object):
@@ -131,7 +132,7 @@ class getPulseApp(object):
         #create and/or update the raw data display if needed
         # if self.bpm_plot:
         #     self.make_bpm_plot()
-        print self.processor.time_in + '\t' + self.processor.fft.samples[-1]
+        print str(self.processor.time_in) + '\t' + str(self.processor.fft.samples[-1])
 
         return True
 
@@ -143,5 +144,5 @@ if __name__ == "__main__":
     next_frame = App.main_loop()
     while next_frame:
         next_frame = App.main_loop()
+        time.sleep(0.05)
     App.print_data()
-
