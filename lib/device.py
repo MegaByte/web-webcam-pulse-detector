@@ -2,6 +2,7 @@ import cv2, time
 import urllib2, base64
 import numpy as np
 import glob
+import time
 
 class ipCamera(object):
 
@@ -16,7 +17,7 @@ class ipCamera(object):
         response = urllib2.urlopen(self.req)
         img_array = np.asarray(bytearray(response.read()), dtype=np.uint8)
         frame = cv2.imdecode(img_array, 1)
-        return frame
+        return (frame, time.time())
 
 class Camera(object):
 
@@ -25,11 +26,12 @@ class Camera(object):
         if not self.cam:
             raise Exception("Camera not accessible")
 
-        self.shape = self.get_frame().shape
+        (frame, frame_time) = self.get_frame()
+        self.shape = frame.shape
 
     def get_frame(self):
         _,frame = self.cam.read()
-        return frame
+        return (frame, time.time())
 
     def release(self):
         self.cam.release()
@@ -45,4 +47,5 @@ class Stream(object):
             return None
         next_photo = self.photos[self.current_photo_index]
         self.current_photo_index += 1
-        return cv2.imread(next_photo, 1)
+        frame_info = next_photo.split('.')
+        return (cv2.imread(next_photo, 1), frame_info[0])

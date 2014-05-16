@@ -107,7 +107,7 @@ class getPulseApp(object):
         Single iteration of the application's main loop.
         """
         # Get current image frame from the camera
-        frame = self.stream.get_frame()
+        (frame, frame_time) = self.stream.get_frame()
         if frame is None:
             return False
         self.h,self.w,_c = frame.shape
@@ -117,6 +117,7 @@ class getPulseApp(object):
 
         #set current image frame to the processor's input
         self.processor.frame_in = frame
+        self.processor.time_in = frame_time
         #process the image frame to perform all needed analysis
         self.processor.run()
         #collect the output frame for display
