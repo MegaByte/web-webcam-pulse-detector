@@ -2,51 +2,51 @@ from openmdao.lib.datatypes.api import Float, Dict, Array, List, Int, Bool
 from openmdao.main.api import Component, Assembly
 import numpy as np
 import time
-     
+
 """
 Some 1D signal processing methods used for the analysis of image frames
 """
-        
+
 class PhaseController(Component):
     """
-    Outputs either a convex combination of two floats generated from an inputted 
+    Outputs either a convex combination of two floats generated from an inputted
     phase angle, or a set of two default values
-    
+
     The inputted phase should be an angle ranging from 0 to 2*pi
-    
+
     The behavior is toggled by the boolean "state" input, which may be connected
     by another component or set directly by the user during a run
-    
-    (In short, this component can help make parts of an image frame flash in 
+
+    (In short, this component can help make parts of an image frame flash in
     sync to a detected heartbeat signal, in real time)
     """
     phase = Float(iotype="in")
     state = Bool(iotype="in")
-    
+
     alpha = Float(iotype="out")
     beta = Float(iotype="out")
-    
+
     def __init__(self, default_a, default_b,state = False):
         super(PhaseController,self).__init__()
         self.state = state
         self.default_a = default_a
         self.default_b = default_b
-    
+
     def toggle(self):
         if self.state:
             self.state = False
         else:
             self.state = True
         return self.state
-        
+
     def on(self):
         if not self.state:
             self.toggle()
-    
+
     def off(self):
         if self.state:
             self.toggle()
-    
+
     def execute(self):
         if self.state:
             t = (np.sin(self.phase) + 1.)/2.
@@ -62,17 +62,17 @@ class BufferFFT(Component):
     """
     Collects data from a connected input float over each run and buffers it
     internally into lists of maximum size 'n'.
-    
+
     (So, each run increases the size of these buffers by 1.)
-    
-    Computes an FFT of this buffered data, along with timestamps and 
+
+    Computes an FFT of this buffered data, along with timestamps and
     correspondonding frequencies (hz), as output arrays.
-    
-    When the internal buffer is full to size 'n', the boolean 'ready' is 
-    toggled to True. This indicates that this component is providing output 
+
+    When the internal buffer is full to size 'n', the boolean 'ready' is
+    toggled to True. This indicates that this component is providing output
     data corresponding to an n-point FFT. The 'ready' state can be outputed as
     a digital control to another component taking a boolean input.
-    
+
     Can be reset to clear out internal buffers using the reset() method. This
     toggles the 'ready' state to False.
     """
@@ -84,6 +84,7 @@ class BufferFFT(Component):
         super(BufferFFT,self).__init__()
         self.n = n
         self.add("data_in", Float(iotype="in"))
+        self.add("time_in", Float(iotype="in"))
         self.samples = []
         self.fps = 1.
         self.add("times", List(iotype="out"))
@@ -91,7 +92,7 @@ class BufferFFT(Component):
         self.add("freqs", Array(iotype="out"))
         self.interpolated = np.zeros(2)
         self.even_times = np.zeros(2)
-        
+
         self.spike_limit = spike_limit
 
 
@@ -106,8 +107,8 @@ class BufferFFT(Component):
         # Perform the FFT
         fft = np.fft.rfft(interpolated)
         self.freqs = float(self.fps)/n*np.arange(n/2 + 1)
-        return fft      
-    
+        return fft
+
     def find_offset(self):
         N = len(self.samples)
         for i in xrange(2,N):
@@ -115,7 +116,7 @@ class BufferFFT(Component):
             delta =  max(samples)-min(samples)
             if delta < self.spike_limit:
                 return N-i
-    
+
     def reset(self):
         N = self.find_offset()
         self.ready = False
@@ -124,7 +125,7 @@ class BufferFFT(Component):
 
     def execute(self):
         self.samples.append(self.data_in)
-        self.times.append(time.time())
+        self.times.append(self.time_in)
         self.size = len(self.samples)
         if self.size > self.n:
             self.ready = True
@@ -143,12 +144,12 @@ class bandProcess(Component):
     hz = Float(iotype="out")
     peak_hz = Float(iotype="out")
     phase = Float(iotype="out")
-    def __init__(self, limits = [0.,3.], make_filtered = True, 
+    def __init__(self, limits = [0.,3.], make_filtered = True,
                  operation = "pass"):
         super(bandProcess,self).__init__()
         self.add("freqs_in",Array(iotype="in"))
         self.add("fft_in", Array(iotype="in"))
-        
+
         self.add("freqs", Array(iotype="out"))
         self.make_filtered = make_filtered
         if make_filtered:
@@ -156,24 +157,24 @@ class bandProcess(Component):
         self.add("fft", Array(iotype="out"))
         self.limits = limits
         self.operation = operation
-        
+
     def execute(self):
         if self.operation == "pass":
-            idx = np.where((self.freqs_in > self.limits[0]) 
+            idx = np.where((self.freqs_in > self.limits[0])
                            & (self.freqs_in < self.limits[1]))
         else:
-            idx = np.where((self.freqs_in < self.limits[0]) 
+            idx = np.where((self.freqs_in < self.limits[0])
                            & (self.freqs_in > self.limits[1]))
-        self.freqs = self.freqs_in[idx] 
+        self.freqs = self.freqs_in[idx]
         self.fft = np.abs(self.fft_in[idx])**2
-        
+
         if self.make_filtered:
             fft_out = 0*self.fft_in
             fft_out[idx] = self.fft_in[idx]
-            
+
             if len(fft_out) > 2:
-                self.filtered = np.fft.irfft(fft_out) 
-                
+                self.filtered = np.fft.irfft(fft_out)
+
                 self.filtered = self.filtered / np.hamming(len(self.filtered))
         try:
             maxidx = np.argmax(self.fft)
@@ -184,17 +185,17 @@ class bandProcess(Component):
 
 class Cardiac(bandProcess):
     """
-    Component to isolate portions of a pre-computed time series FFT 
+    Component to isolate portions of a pre-computed time series FFT
     corresponding to human heartbeats
     """
-    
+
     def __init__(self, bpm_limits = [50,160]):
         super(Cardiac,self).__init__()
         self.add("bpm", Float(iotype="out"))
         self.limits = [bpm_limits[0]/60., bpm_limits[1]/60.]
-        
+
     def execute(self):
         super(Cardiac,self).execute()
         self.freqs = 60*self.freqs
         self.bpm = 60*self.peak_hz
-        
+
